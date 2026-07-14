@@ -219,7 +219,7 @@ endfunction()
 
 function(setup_hipvs_target target_name)
     target_link_libraries(
-            ${target_name} PUBLIC cuvs::cuvs rmm::rmm_logger_impl
+            ${target_name} PUBLIC cuvs::cuvs rmm::rmm
 
     )
 endfunction()

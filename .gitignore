@@ -14,3 +14,7 @@ __pycache__/
 .codex
 /.vscode/
 
+Nvidia_AMD_Benchmark/
+hipVS/
+available_modules.txt
+*.bak
