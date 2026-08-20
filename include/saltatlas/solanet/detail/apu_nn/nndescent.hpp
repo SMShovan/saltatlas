@@ -1356,6 +1356,43 @@ void build_index_main_loop(
       SALTATLAS_HIP_CHECK(hipDeviceSynchronize());
       rec_time().stop();  // neighbor_checks
 
+#ifdef SALTATLAS_SOLANET_APU_NND_OVERFLOW_STATS
+      // How many candidate pushes did the fixed-width buffer refuse?
+      //
+      // No instrumentation is needed in the kernel: the atomicAdd at both push
+      // sites increments unconditionally and the drop is decided afterwards
+      // from the slot index it returned. So candidates_counts[i] is the number
+      // of pushes ATTEMPTED for point i, and everything past candidate_width
+      // was discarded. Reading it here, between the neighbour check and the
+      // update kernel that consumes it, costs one device-to-host copy per pass
+      // and does not perturb the kernels at all.
+      {
+        std::vector<int> h_counts(n_points);
+        SALTATLAS_HIP_CHECK(hipMemcpy(h_counts.data(), candidate_counts.data(),
+                                      n_points * sizeof(int),
+                                      hipMemcpyDeviceToHost));
+        size_t attempted = 0, stored = 0, overflowed_points = 0, worst = 0;
+        for (size_t i = 0; i < n_points; ++i) {
+          const size_t a = static_cast<size_t>(h_counts[i]);
+          attempted += a;
+          stored += std::min<size_t>(a, static_cast<size_t>(candidate_width));
+          if (a > static_cast<size_t>(candidate_width)) {
+            ++overflowed_points;
+            worst = std::max(worst, a);
+          }
+        }
+        const size_t dropped = attempted - stored;
+        std::cout << "[overflow] step " << super_step_no
+                  << (symmetric_pass ? " (new,new)" : " (new,old)")
+                  << "  attempted=" << attempted << "  dropped=" << dropped
+                  << " (" << (attempted ? 100.0 * dropped / attempted : 0.0)
+                  << "%)  points_over=" << overflowed_points << "/" << n_points
+                  << " (" << (100.0 * overflowed_points / n_points)
+                  << "%)  width=" << candidate_width << "  worst=" << worst
+                  << std::endl;
+      }
+#endif
+
       launch_update_knng();
     };
 
